@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Etiquetas de prueba · Mango Habana</title>
+<script src="https://cdn.jsdelivr.net/gh/davidshimjs/qrcodejs/qrcode.min.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
+    background: #F7F7F7;
+    color: #111;
+    padding: 32px 20px 60px;
+  }
+  .header { text-align: center; margin-bottom: 28px; }
+  .header h1 { font-size: 16px; font-weight: 600; letter-spacing: 0.5px; }
+  .header p { font-size: 12px; color: #999; margin-top: 6px; max-width: 460px; margin-left: auto; margin-right: auto; line-height: 1.5; }
+  .warn { font-size: 12px; color: #B91C1C; margin-top: 10px; display: none; }
+  .warn.show { display: block; }
+
+  .custom {
+    max-width: 360px;
+    margin: 0 auto 36px;
+    background: #fff;
+    border: 1px solid #E8E8E8;
+    border-radius: 16px;
+    padding: 18px;
+  }
+  .custom .label { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: #AAA; margin-bottom: 10px; }
+  .custom .row { display: flex; gap: 8px; }
+  .custom input {
+    flex: 1;
+    font-family: inherit;
+    font-size: 14px;
+    border: 1px solid #E8E8E8;
+    border-radius: 10px;
+    padding: 10px 12px;
+    outline: none;
+  }
+  .custom input:focus { border-color: #111; }
+  .custom button {
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    background: #111;
+    color: #fff;
+    border: none;
+    border-radius: 10px;
+    padding: 0 18px;
+    cursor: pointer;
+  }
+  .custom button:active { background: #2a2a2a; }
+  #customResult { margin-top: 16px; display: none; flex-direction: column; align-items: center; }
+  #customResult.show { display: flex; }
+  #customQr img, #customQr canvas { border-radius: 8px; }
+  #customResult .code { font-family: monospace; font-size: 13px; margin-top: 8px; color: #555; }
+
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 12px;
+    max-width: 980px;
+    margin: 0 auto;
+  }
+  .card {
+    background: #fff;
+    border: 1px solid #E8E8E8;
+    border-radius: 14px;
+    padding: 14px;
+    text-align: center;
+  }
+  .card .qr { display: flex; justify-content: center; margin-bottom: 10px; }
+  .card .qr img, .card .qr canvas { border-radius: 6px; }
+  .card .sku { font-family: monospace; font-size: 12px; font-weight: 700; }
+  .card .nombre { font-size: 11px; color: #999; margin-top: 3px; line-height: 1.3; }
+</style>
+</head>
+<body>
+  <div class="header">
+    <h1>ETIQUETAS DE PRUEBA — MANGO HABANA</h1>
+    <p>
+      Códigos QR generados a partir del SKU de cada producto del catálogo de prueba.
+      En la caja del TPV pulsa <strong>“Encender escáner”</strong> y apunta la cámara USB
+      a uno de estos códigos (en pantalla o impreso) — el producto se añade al carrito y
+      salta a la caja automáticamente.
+    </p>
+    <p class="warn" id="warn">No se pudo cargar la librería de códigos QR (sin internet). Conéctate a internet y recarga la página.</p>
+  </div>
+
+  <div class="custom">
+    <div class="label">Generar QR de un SKU personalizado</div>
+    <div class="row">
+      <input id="customInput" type="text" placeholder="Ej: MH-CAM-001" autocapitalize="characters" />
+      <button id="customBtn">Generar</button>
+    </div>
+    <div id="customResult">
+      <div id="customQr"></div>
+      <div class="code" id="customCode"></div>
+    </div>
+  </div>
+
+  <div class="grid" id="grid"></div>
+
+  <script>
+    const PRODUCTOS = [
+      ['MH-CAM-001', 'Camiseta Blanca Básica'],
+      ['MH-CAM-002', 'Camiseta Negra Premium'],
+      ['MH-CAM-003', 'Camiseta Roja Brillante'],
+      ['MH-PAN-001', 'Pantalón Denim Azul'],
+      ['MH-PAN-002', 'Pantalón Negro Elegante'],
+      ['MH-VES-001', 'Vestido Negro Elegante'],
+      ['MH-VES-002', 'Vestido Blanco Romántico'],
+      ['MH-FAL-001', 'Falda Denim Casual'],
+      ['MH-FAL-002', 'Falda Plisada Roja'],
+      ['MH-CHQ-001', 'Chaqueta Leather Negra'],
+      ['MH-CHQ-002', 'Chaqueta Denim Clásica'],
+      ['MH-ACC-001', 'Cinturón Piel Marrón'],
+      ['MH-ACC-002', 'Bufanda Lana Beige'],
+      ['MH-ACC-003', 'Gafas de Sol Polarizadas'],
+      ['MH-ACC-004', 'Bolsa de Mano Negra'],
+    ];
+
+    function makeQr(container, text, size) {
+      new QRCode(container, {
+        text: text,
+        width: size,
+        height: size,
+        colorDark: '#111111',
+        colorLight: '#FFFFFF',
+        correctLevel: QRCode.CorrectLevel.M,
+      });
+    }
+
+    function init() {
+      // Si la librería no cargó (sin internet), avisar y salir.
+      if (typeof QRCode === 'undefined') {
+        document.getElementById('warn').classList.add('show');
+        return;
+      }
+
+      const grid = document.getElementById('grid');
+      PRODUCTOS.forEach(([sku, nombre]) => {
+        const card = document.createElement('div');
+        card.className = 'card';
+
+        const qrWrap = document.createElement('div');
+        qrWrap.className = 'qr';
+        card.appendChild(qrWrap);
+
+        const skuEl = document.createElement('div');
+        skuEl.className = 'sku';
+        skuEl.textContent = sku;
+        card.appendChild(skuEl);
+
+        const nameEl = document.createElement('div');
+        nameEl.className = 'nombre';
+        nameEl.textContent = nombre;
+        card.appendChild(nameEl);
+
+        grid.appendChild(card);
+        makeQr(qrWrap, sku, 130);
+      });
+
+      const customInput = document.getElementById('customInput');
+      const customBtn = document.getElementById('customBtn');
+      const customResult = document.getElementById('customResult');
+      const customQr = document.getElementById('customQr');
+      const customCode = document.getElementById('customCode');
+
+      function generateCustom() {
+        const value = customInput.value.trim();
+        if (!value) return;
+        customQr.innerHTML = '';
+        makeQr(customQr, value, 180);
+        customCode.textContent = value;
+        customResult.classList.add('show');
+      }
+      customBtn.onclick = generateCustom;
+      customInput.addEventListener('keydown', e => { if (e.key === 'Enter') generateCustom(); });
+    }
+
+    window.addEventListener('DOMContentLoaded', init);
+  </script>
+</body>
+</html>
