@@ -620,25 +620,25 @@ function PaymentModal({ isOpen, onClose, onConfirm, total, descuento, confirming
           </div>
         </div>
 
-        {/* Recargo (%) — Transferencia simple, 10-40% */}
+        {/* Recargo (%) — Transferencia simple, 0-40% (0 = sin recargo) */}
         {esTransfer && (
           <div style={{ marginBottom: 16 }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
               <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: 0.5 }}>Recargo transferencia</span>
               <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                <input type="number" min="10" max="40" value={recargoPct}
-                  onChange={e => setRecargoPct(Math.min(40, Math.max(10, parseFloat(e.target.value) || 10)))}
+                <input type="number" min="0" max="40" value={recargoPct}
+                  onChange={e => setRecargoPct(Math.min(40, Math.max(0, parseFloat(e.target.value) || 0)))}
                   style={{ width: 52, padding: '4px 6px', fontSize: 13, fontWeight: 700, textAlign: 'right', border: '1.5px solid var(--border)', borderRadius: 6, outline: 'none' }} />
                 <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-secondary)' }}>%</span>
               </div>
             </div>
             <div style={{ display: 'flex', gap: 6 }}>
-              {[10, 20, 30, 40].map(p => (
+              {[0, 10, 20, 30, 40].map(p => (
                 <button key={p} onClick={() => setRecargoPct(p)}
                   style={{ flex: 1, padding: '8px 0', borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'var(--font-sans)',
                     border: `1.5px solid ${recargoPct === p ? 'var(--accent)' : 'var(--border)'}`,
                     background: recargoPct === p ? 'var(--accent)' : '#fff', color: recargoPct === p ? '#fff' : 'var(--text-secondary)' }}
-                >{p}%</button>
+                >{p === 0 ? 'Sin' : `${p}%`}</button>
               ))}
             </div>
           </div>
@@ -694,15 +694,18 @@ function PaymentModal({ isOpen, onClose, onConfirm, total, descuento, confirming
                 style={{ flex: 1, padding: '8px 10px', fontSize: 14, fontWeight: 700, textAlign: 'right', border: '1.5px solid var(--border)', borderRadius: 8, outline: 'none' }} />
               <span style={{ fontSize: 12, color: 'var(--text-muted)', width: 34 }}>CUP</span>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10, paddingLeft: 100 }}>
-              <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Recargo:</span>
-              {[10, 15, 20, 30, 40].map(p => (
-                <button key={p} onClick={() => setSTransferPct(p)}
-                  style={{ padding: '3px 7px', borderRadius: 6, fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: 'var(--font-sans)',
-                    border: `1px solid ${sTransferPct === p ? 'var(--accent)' : 'var(--border)'}`,
-                    background: sTransferPct === p ? 'var(--accent)' : '#fff', color: sTransferPct === p ? '#fff' : 'var(--text-secondary)' }}
-                >{p}%</button>
-              ))}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+              <span style={{ fontSize: 11, color: 'var(--text-muted)', width: 92, flexShrink: 0, textAlign: 'right', paddingRight: 2 }}>Recargo</span>
+              <div style={{ flex: 1, display: 'flex', gap: 4, minWidth: 0 }}>
+                {[0, 10, 15, 20, 30, 40].map(p => (
+                  <button key={p} onClick={() => setSTransferPct(p)}
+                    style={{ flex: 1, minWidth: 0, padding: '4px 0', borderRadius: 6, fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: 'var(--font-sans)',
+                      border: `1px solid ${sTransferPct === p ? 'var(--accent)' : 'var(--border)'}`,
+                      background: sTransferPct === p ? 'var(--accent)' : '#fff', color: sTransferPct === p ? '#fff' : 'var(--text-secondary)' }}
+                  >{p === 0 ? 'Sin' : `${p}%`}</button>
+                ))}
+              </div>
+              <span style={{ width: 34, flexShrink: 0 }} />
             </div>
             {splitLine('Efectivo', sUsd, setSUsd, 'USD')}
             {splitLine('Efectivo', sCup, setSCup, 'CUP')}

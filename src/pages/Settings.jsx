@@ -104,7 +104,7 @@ export function Settings() {
   const [wooStatus, setWooStatus] = useState(null); // 'ok' | 'error' | null
 
   // ── Sistema ──
-  const [sys, setSys] = useState({ nombre_negocio: 'Mango Habana', pie_comprobante: 'Gracias por su compra', umbral_stock: 5, copias: 1, impresora: '', impresion_directa: false });
+  const [sys, setSys] = useState({ nombre_negocio: 'Mango Habana', pie_comprobante: 'Gracias por su compra', umbral_stock: 5, stock_bajo_activo: true, copias: 1, impresora: '', impresion_directa: false });
   const [sysSaved, setSysSaved] = useState(false);
 
   // ── Impresoras ──
@@ -162,7 +162,7 @@ export function Settings() {
     // Sistema
     try {
       const sysConf = JSON.parse(localStorage.getItem('tpv_config') || '{}');
-      if (sysConf.nombre_negocio) setSys(sysConf);
+      if (sysConf.nombre_negocio) setSys(s => ({ ...s, ...sysConf }));
     } catch { /* noop */ }
 
     // Moneda
@@ -651,15 +651,27 @@ export function Settings() {
         <Field label="Pie del comprobante">
           <MHTextarea value={sys.pie_comprobante} onChange={v => setSys(s => ({ ...s, pie_comprobante: v }))} rows={3} placeholder={'Gracias por su compra\n¡Vuelva pronto!'} />
         </Field>
-        <Field label="Umbral stock bajo">
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <Field label="Alertas de stock bajo">
+          <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', marginBottom: 10 }}>
+            <input
+              type="checkbox"
+              checked={sys.stock_bajo_activo !== false}
+              onChange={e => setSys(s => ({ ...s, stock_bajo_activo: e.target.checked }))}
+              style={{ width: 16, height: 16, accentColor: 'var(--accent)', cursor: 'pointer' }}
+            />
+            <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+              Avisar cuando un producto tenga poco stock (Dashboard e Inventario)
+            </span>
+          </label>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, opacity: sys.stock_bajo_activo !== false ? 1 : 0.45 }}>
             <input
               type="number" min="1" max="50"
               value={sys.umbral_stock}
+              disabled={sys.stock_bajo_activo === false}
               onChange={e => setSys(s => ({ ...s, umbral_stock: parseInt(e.target.value) || 5 }))}
               style={{ width: 80, padding: '10px 12px', fontSize: 14, border: '1.5px solid var(--border)', borderRadius: 8, outline: 'none', fontFamily: 'var(--font-sans)' }}
             />
-            <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>unidades — alertar cuando el stock sea menor o igual a este valor</span>
+            <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>unidades — avisar cuando el stock sea menor o igual a este valor</span>
           </div>
         </Field>
         <Field label="Copias de comprobante">

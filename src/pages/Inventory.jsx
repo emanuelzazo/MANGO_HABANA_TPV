@@ -33,8 +33,11 @@ export function Inventory() {
   const toast = useToastStore();
 
   const umbral = (() => {
-    try { return parseInt(JSON.parse(localStorage.getItem('tpv_config') || '{}').umbral_stock ?? 5); }
-    catch { return 5; }
+    try {
+      const c = JSON.parse(localStorage.getItem('tpv_config') || '{}');
+      if (c.stock_bajo_activo === false) return 0; // alertas desactivadas → solo "sin stock"
+      return parseInt(c.umbral_stock ?? 5);
+    } catch { return 5; }
   })();
 
   const loadProducts = async (showToast = false) => {

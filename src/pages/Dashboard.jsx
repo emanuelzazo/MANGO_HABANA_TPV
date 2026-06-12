@@ -95,8 +95,11 @@ export function Dashboard() {
   const toast = useToastStore();
 
   const umbral = useMemo(() => {
-    try { return parseInt(JSON.parse(localStorage.getItem('tpv_config') || '{}').umbral_stock ?? 5); }
-    catch { return 5; }
+    try {
+      const c = JSON.parse(localStorage.getItem('tpv_config') || '{}');
+      if (c.stock_bajo_activo === false) return -1; // alertas desactivadas
+      return parseInt(c.umbral_stock ?? 5);
+    } catch { return 5; }
   }, []);
 
   const ventasHoy = useMemo(() => {
@@ -140,6 +143,27 @@ export function Dashboard() {
     }));
     return Object.values(map).sort((a, b) => b.cantidad - a.cantidad).slice(0, 5);
   }, [ventasHoy]);
+
+  // Ventas de los últimos 7 días (para el mini gráfico de barras)
+  const ventas7dias = useMemo(() => {
+    const dias = [];
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() - i);
+      const fin = new Date(d); fin.setHours(23, 59, 59, 999);
+      const total = ventas.filter(v => { const f = new Date(v.fecha); return f >= d && f <= fin; })
+        .reduce((s, v) => s + v.total, 0);
+      dias.push({
+        label: d.toLocaleDateString('es-ES', { weekday: 'short' }).replace('.', ''),
+        total,
+        hoy: i === 0,
+      });
+    }
+    return dias;
+  }, [ventas]);
+
+  const ultimasVentas = useMemo(() =>
+    [...ventas].sort((a, b) => new Date(b.fecha) - new Date(a.fecha)).slice(0, 6),
+  [ventas]);
 
   const loadWooData = useCallback(async (showToast = false) => {
     const lowFrom = (list) => list.filter(p => p.gestionar_stock && p.stock > 0 && p.stock <= umbral);
@@ -235,11 +259,11 @@ export function Dashboard() {
         />
       </div>
 
-      {/* Contenido principal */}
-      <div className="grid grid-cols-2 gap-5">
+      {/* Fila central: Top 5 productos · Alertas stock · Ventas 7 días */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 mb-5">
         {/* Top productos */}
-        <div className="bg-white rounded-2xl border border-gray-100 p-5">
-          <p className="text-sm font-semibold text-gray-900 mb-4">Top productos hoy</p>
+        <div className="bg-white rounded-2xl border p-5" style={{ borderColor: 'var(--border)' }}>
+          <p className="text-xs font-semibold uppercase tracking-wide mb-4" style={{ color: 'var(--text-muted)' }}>Top 5 productos</p>
           {!salesLoaded ? (
             <div className="flex justify-center py-6"><Spinner /></div>
           ) : topProducts.length === 0 ? (
@@ -248,21 +272,13 @@ export function Dashboard() {
               <p className="text-sm">Sin ventas registradas hoy</p>
             </div>
           ) : (
-            <div className="flex flex-col gap-3">
+            <div className="flex flex-col gap-3.5">
               {topProducts.map((p, i) => (
                 <div key={p.nombre} className="flex items-center gap-3">
                   <span className="text-xs text-gray-300 w-4 font-mono font-semibold select-none">{i + 1}</span>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-gray-800 truncate">{p.nombre}</p>
-                    <div className="flex items-center gap-2 mt-0.5">
-                      <div className="flex-1 h-1 bg-gray-100 rounded-full overflow-hidden">
-                        <div
-                          className="h-full bg-gray-800 rounded-full transition-all"
-                          style={{ width: `${(p.cantidad / topProducts[0].cantidad) * 100}%` }}
-                        />
-                      </div>
-                      <span className="text-xs text-gray-400 whitespace-nowrap">{p.cantidad} uds.</span>
-                    </div>
+                    <p className="text-xs text-gray-400 mt-0.5">{p.cantidad} uds.</p>
                   </div>
                   <span className="text-sm font-semibold text-gray-900 tabular-nums">{formatCurrency(p.total)}</span>
                 </div>
@@ -271,87 +287,119 @@ export function Dashboard() {
           )}
         </div>
 
-        {/* Últimas ventas */}
-        <div className="bg-white rounded-2xl border border-gray-100 p-5">
-          <div className="flex items-center gap-2 mb-4">
-            <Clock size={14} className="text-gray-400" />
-            <p className="text-sm font-semibold text-gray-900">Últimas ventas</p>
-          </div>
-          {!salesLoaded ? (
-            <div className="flex justify-center py-6"><Spinner /></div>
-          ) : ventasHoy.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-8 text-gray-400">
-              <Clock size={28} className="mb-2 opacity-30" />
-              <p className="text-sm">Sin ventas hoy</p>
-            </div>
-          ) : (
-            <div className="flex flex-col divide-y divide-gray-50">
-              {[...ventasHoy].reverse().slice(0, 5).map(v => (
-                <div key={v.id} className="flex items-center justify-between py-2.5 first:pt-0 last:pb-0">
-                  <div>
-                    <p className="text-sm font-medium text-gray-900">{v.numero}</p>
-                    <p className="text-xs text-gray-400 mt-0.5">{v.dependienta} · {formatDateTime(v.fecha)}</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-sm font-semibold text-gray-900 tabular-nums">{formatCurrency(v.total)}</p>
-                    <Badge variant={v.metodo_pago === 'transferencia' ? 'info' : 'default'} className="mt-0.5">
-                      {v.metodo_pago === 'transferencia' ? 'Transferencia' : 'Efectivo'}
-                    </Badge>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Stock bajo — ocupa todo el ancho */}
-        <div className="col-span-2 bg-white rounded-2xl border border-gray-100 p-5">
+        {/* Alertas de stock */}
+        <div className="bg-white rounded-2xl border p-5" style={{ borderColor: 'var(--border)' }}>
           <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-2">
-              <AlertTriangle size={14} className="text-amber-500" />
-              <p className="text-sm font-semibold text-gray-900">Alertas de stock</p>
-              {lowStockProducts.length > 0 && (
-                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700">
-                  {lowStockProducts.length}
-                </span>
-              )}
-            </div>
-            {lastRefresh && (
-              <p className="text-xs text-gray-400">
-                Act. {lastRefresh.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
-              </p>
+            <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>Alertas stock</p>
+            {lowStockProducts.length > 0 ? (
+              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-700">
+                {lowStockProducts.length}
+              </span>
+            ) : (
+              <AlertTriangle size={13} className="text-gray-300" />
             )}
           </div>
-
           {loadingStock ? (
             <div className="flex justify-center py-6"><Spinner /></div>
           ) : wooConnected === false ? (
-            <div className="flex items-center gap-3 p-4 bg-gray-50 rounded-xl">
-              <WifiOff size={16} className="text-gray-400 shrink-0" />
+            <div className="flex items-start gap-3 p-3 bg-gray-50 rounded-xl">
+              <WifiOff size={15} className="text-gray-400 shrink-0 mt-0.5" />
               <div>
                 <p className="text-sm font-medium text-gray-700">WooCommerce no configurado</p>
-                <p className="text-xs text-gray-400 mt-0.5">Ve a Configuración para conectar tu tienda y ver el stock en tiempo real</p>
+                <p className="text-xs text-gray-400 mt-0.5">Conecta tu tienda en Configuración</p>
               </div>
             </div>
           ) : lowStockProducts.length === 0 ? (
             <div className="flex items-center gap-2 text-emerald-600 py-2">
-              <CheckCircle2 size={16} />
-              <p className="text-sm">Todo el stock está en niveles correctos</p>
+              <CheckCircle2 size={15} />
+              <p className="text-sm">Stock en niveles correctos</p>
             </div>
           ) : (
-            <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2">
+            <div className="flex flex-col divide-y divide-gray-50 max-h-56 overflow-y-auto">
               {lowStockProducts.map(p => (
-                <div key={p.id} className="flex items-center gap-2.5 p-3 bg-amber-50 border border-amber-100 rounded-xl">
-                  <AlertTriangle size={13} className="text-amber-500 shrink-0" />
-                  <div className="min-w-0">
-                    <p className="text-xs font-medium text-gray-800 truncate">{p.nombre}</p>
-                    <p className="text-xs text-amber-600 font-semibold mt-0.5">{p.stock} restantes</p>
-                  </div>
+                <div key={p.id} className="flex items-center justify-between gap-3 py-2.5 first:pt-0 last:pb-0">
+                  <p className="text-sm font-medium text-gray-800 truncate">{p.nombre}</p>
+                  <span className={`text-xs font-semibold whitespace-nowrap ${p.stock === 0 ? 'text-red-500' : 'text-amber-600'}`}>
+                    {p.stock === 0 ? '• Sin stock' : `• ${p.stock} uds`}
+                  </span>
                 </div>
               ))}
             </div>
           )}
         </div>
+
+        {/* Ventas 7 días */}
+        <div className="bg-white rounded-2xl border p-5 flex flex-col" style={{ borderColor: 'var(--border)' }}>
+          <p className="text-xs font-semibold uppercase tracking-wide mb-4" style={{ color: 'var(--text-muted)' }}>Ventas 7 días</p>
+          {!salesLoaded ? (
+            <div className="flex justify-center py-6"><Spinner /></div>
+          ) : (
+            <div className="flex items-end gap-2 flex-1" style={{ minHeight: 120 }}>
+              {ventas7dias.map((d, i) => {
+                const max = Math.max(...ventas7dias.map(x => x.total), 1);
+                return (
+                  <div key={i} className="flex-1 flex flex-col items-center gap-1.5 h-full justify-end" title={formatCurrency(d.total)}>
+                    <div
+                      className="w-full rounded-md transition-all"
+                      style={{
+                        height: `${Math.max((d.total / max) * 100, 4)}%`,
+                        background: d.hoy ? 'var(--accent)' : '#E5E7EB',
+                      }}
+                    />
+                    <span className="text-[10px] uppercase" style={{ color: d.hoy ? 'var(--text-primary)' : 'var(--text-muted)', fontWeight: d.hoy ? 700 : 500 }}>
+                      {d.label}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Últimas ventas — tabla a ancho completo */}
+      <div className="bg-white rounded-2xl border p-5" style={{ borderColor: 'var(--border)' }}>
+        <div className="flex items-center justify-between mb-4">
+          <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>Últimas ventas</p>
+          {lastRefresh && (
+            <p className="text-xs text-gray-400">
+              Act. {lastRefresh.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
+            </p>
+          )}
+        </div>
+        {!salesLoaded ? (
+          <div className="flex justify-center py-6"><Spinner /></div>
+        ) : ultimasVentas.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-8 text-gray-400">
+            <Clock size={28} className="mb-2 opacity-30" />
+            <p className="text-sm">Sin ventas registradas</p>
+          </div>
+        ) : (
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left">
+                {['Ticket', 'Hora', 'Dependienta', 'Total', 'Pago'].map((h, i) => (
+                  <th key={h} className={`pb-3 text-xs font-semibold uppercase tracking-wide ${i >= 3 ? 'text-right' : ''}`} style={{ color: 'var(--text-muted)' }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-50">
+              {ultimasVentas.map(v => (
+                <tr key={v.id}>
+                  <td className="py-3 font-semibold text-gray-900">{v.numero}</td>
+                  <td className="py-3 text-gray-500">{formatDateTime(v.fecha)}</td>
+                  <td className="py-3 text-gray-700">{v.dependienta}</td>
+                  <td className="py-3 text-right font-semibold text-gray-900 tabular-nums">{formatCurrency(v.total)}</td>
+                  <td className="py-3 text-right">
+                    <Badge variant={v.metodo_pago === 'transferencia' ? 'info' : 'default'}>
+                      {v.metodo_pago === 'transferencia' ? 'Transferencia' : v.metodo_pago === 'mixto' ? 'Desglosado' : 'Efectivo'}
+                    </Badge>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
       </div>
     </div>
   );

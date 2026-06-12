@@ -34,7 +34,11 @@
         --shadow-md: 0 4px 12px rgba(0,0,0,0.08);
         --shadow-lg: 0 20px 60px rgba(0,0,0,0.12);
       }
-      * { box-sizing: border-box; margin: 0; padding: 0; }
+      /* Solo box-sizing: el reset de margin/padding lo hace el preflight de
+         Tailwind (en @layer). Un reset universal sin capa pisaría todas las
+         utilidades p-*/m-* de Tailwind v4. */
+      * { box-sizing: border-box; }
+      body { margin: 0; }
       html, body, #root { height: 100%; }
       body {
         font-family: var(--font-sans);

@@ -8,33 +8,61 @@ import { wooFetch, buildQueryString } from './woocommerceClient';
  * @param {object} saleData - Datos de la venta del TPV
  * @returns {Promise<object>}
  */
-export async function createOrder(saleData) {
-  const { items, total, descuento, metodoPago, dependienta } = saleData;
+const METODO_LABEL = { efectivo: 'Efectivo', transferencia: 'Transferencia', mixto: 'Desglosado', tarjeta: 'Tarjeta' };
 
-  const lineItems = items.map(item => ({
-    product_id: item.woo_id,
-    quantity: item.cantidad,
-    price: item.precio_unitario.toString(),
-    ...(item.descuento > 0 ? {
-      meta_data: [{ key: 'descuento_aplicado', value: `${item.descuento}` }],
-    } : {}),
+/**
+ * Resuelve el product_id PUBLICADO real por SKU. Evita "auto-draft" en los
+ * pedidos: el `woo_id` cacheado puede ser obsoleto (otra tienda / reimportación).
+ */
+async function resolveWooId(item) {
+  if (item.sku) {
+    try {
+      const found = await wooFetch(`/products${buildQueryString({ sku: item.sku, per_page: 1 })}`);
+      if (Array.isArray(found) && found[0]?.id) return found[0].id;
+    } catch { /* sin conexión / no encontrado */ }
+  }
+  return item.woo_id || item.id || 0;
+}
+
+export async function createOrder(saleData) {
+  const { items, descuento, metodoPago, dependienta, recargo, recargoPct, pagos } = saleData;
+
+  const lineItems = await Promise.all(items.map(async (item) => {
+    const pid = await resolveWooId(item);
+    const subtotal = (item.precio_unitario * item.cantidad).toFixed(2);
+    const total = (item.subtotal != null ? item.subtotal : item.precio_unitario * item.cantidad).toFixed(2);
+    if (pid) {
+      // product_id válido → WooCommerce usa el nombre real y descuenta stock.
+      return {
+        product_id: pid,
+        quantity: item.cantidad,
+        subtotal,
+        total,
+        ...(item.descuento > 0 ? { meta_data: [{ key: 'descuento_aplicado', value: `${item.descuento}` }] } : {}),
+      };
+    }
+    // Sin product_id válido → línea con nombre explícito (nunca "auto-draft").
+    return {
+      name: item.nombre + (item.sku ? ` [${item.sku}]` : ''),
+      quantity: item.cantidad,
+      subtotal,
+      total,
+    };
   }));
 
   const orderData = {
     status: 'completed',
-    payment_method: metodoPago === 'tarjeta' ? 'cod' : 'cod',
-    payment_method_title: metodoPago === 'tarjeta' ? 'Tarjeta' : 'Efectivo',
+    payment_method: 'tpv',
+    payment_method_title: METODO_LABEL[metodoPago] || metodoPago || 'Efectivo',
     set_paid: true,
     line_items: lineItems,
     meta_data: [
       { key: 'tpv_dependienta', value: dependienta || 'Desconocido' },
-      { key: 'tpv_metodo_pago', value: metodoPago },
-      ...(descuento > 0 ? [{ key: 'tpv_descuento_total', value: descuento.toString() }] : []),
+      { key: 'tpv_metodo_pago', value: metodoPago || '' },
+      ...(recargo > 0 ? [{ key: 'tpv_recargo', value: String(recargo) }, { key: 'tpv_recargo_pct', value: String(recargoPct || '') }] : []),
+      ...(pagos ? [{ key: 'tpv_pagos', value: JSON.stringify(pagos) }] : []),
+      ...(descuento > 0 ? [{ key: 'tpv_descuento_total', value: String(descuento) }] : []),
     ],
-    ...(descuento > 0 ? {
-      coupon_lines: [],
-      discount_total: descuento.toString(),
-    } : {}),
   };
 
   return wooFetch('/orders', {
